@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms#, utils
 # import torch.optim as optim
+import argparse
 
 import numpy as np
 from PIL import Image
@@ -48,49 +49,65 @@ def save_output(image_name,pred,d_dir):
 	for i in range(1,len(bbb)):
 		imidx = imidx + "." + bbb[i]
 
-	imo.save(d_dir+imidx+'.png')
+	imo.save(d_dir+'/'+imidx+'.png')
 
-# --------- 1. get image path and name ---------
 
-image_dir = './test_data/test_images/'
-prediction_dir = './test_data/test_results/'
-model_dir = './saved_models/basnet_bsi/basnet.pth'
+if __name__ == "__main__":
+    # --------- 1. get image path and name ---------
+	parser = argparse.ArgumentParser()
+	parser.add_argument(
+		'-m', '--model_dir',
+		type=str,
+		default='saved_models/basnet_bsi/basnet_bsi_itr_200000_train_1.244218_tar_0.055153.pth',
+		help='image dir'
+	)
 
-img_name_list = glob.glob(image_dir + '*.jpg')
+	args = parser.parse_args()
 
-# --------- 2. dataloader ---------
-#1. dataload
-test_salobj_dataset = SalObjDataset(img_name_list = img_name_list, lbl_name_list = [],transform=transforms.Compose([RescaleT(256),ToTensorLab(flag=0)]))
-test_salobj_dataloader = DataLoader(test_salobj_dataset, batch_size=1,shuffle=False,num_workers=1)
+	image_dir = '/data/fangcheng.ji/datasets/human_segmentation/test/images'
+	prediction_dir = '/data/fangcheng.ji/datasets/human_segmentation/test/predicts'
+	# model_dir = './saved_models/basnet.pth'
+	# model_dir = "saved_models/basnet_bsi/basnet_bsi_itr_40000_train_2.019115_tar_0.142860.pth"
 
-# --------- 3. model define ---------
-print("...load BASNet...")
-net = BASNet(3,1)
-net.load_state_dict(torch.load(model_dir))
-if torch.cuda.is_available():
-	net.cuda()
-net.eval()
+	img_name_list = glob.glob(image_dir + '/*.jpg')
 
-# --------- 4. inference for each image ---------
-for i_test, data_test in enumerate(test_salobj_dataloader):
+	# --------- 2. dataloader ---------
+	#1. dataload
+	test_salobj_dataset = SalObjDataset(
+		img_name_list = img_name_list,
+		lbl_name_list = [],
+		transform=transforms.Compose([RescaleT(256),ToTensorLab(flag=0)])
+	)
+	test_salobj_dataloader = DataLoader(test_salobj_dataset, batch_size=1,shuffle=False,num_workers=1)
 
-	print("inferencing:",img_name_list[i_test].split("/")[-1])
-
-	inputs_test = data_test['image']
-	inputs_test = inputs_test.type(torch.FloatTensor)
-
+	# --------- 3. model define ---------
+	print("...load BASNet...")
+	net = BASNet(3,1)
+	net.load_state_dict(torch.load(args.model_dir))
 	if torch.cuda.is_available():
-		inputs_test = Variable(inputs_test.cuda())
-	else:
-		inputs_test = Variable(inputs_test)
+		net.cuda()
+	net.eval()
 
-	d1,d2,d3,d4,d5,d6,d7,d8 = net(inputs_test)
+	# --------- 4. inference for each image ---------
+	for i_test, data_test in enumerate(test_salobj_dataloader):
 
-	# normalization
-	pred = d1[:,0,:,:]
-	pred = normPRED(pred)
+		# print("inferencing:",img_name_list[i_test].split("/")[-1])
 
-	# save results to test_results folder
-	save_output(img_name_list[i_test],pred,prediction_dir)
+		inputs_test = data_test['image']
+		inputs_test = inputs_test.type(torch.FloatTensor)
 
-	del d1,d2,d3,d4,d5,d6,d7,d8
+		if torch.cuda.is_available():
+			inputs_test = Variable(inputs_test.cuda())
+		else:
+			inputs_test = Variable(inputs_test)
+
+		d1,d2,d3,d4,d5,d6,d7,d8 = net(inputs_test)
+
+		# normalization
+		pred = d1[:,0,:,:]
+		pred = normPRED(pred)
+
+		# save results to test_results folder
+		save_output(img_name_list[i_test],pred,prediction_dir)
+
+		del d1,d2,d3,d4,d5,d6,d7,d8

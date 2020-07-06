@@ -6,9 +6,11 @@ from skimage import io, transform, color
 import numpy as np
 import math
 import matplotlib.pyplot as plt
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, IterableDataset
 from torchvision import transforms, utils
 from PIL import Image
+import cv2
+from time import time
 #==========================dataset load==========================
 
 class RescaleT(object):
@@ -36,8 +38,20 @@ class RescaleT(object):
 		# img = transform.resize(image,(new_h,new_w),mode='constant')
 		# lbl = transform.resize(label,(new_h,new_w),mode='constant', order=0, preserve_range=True)
 
+		# t1 = time()
 		img = transform.resize(image,(self.output_size,self.output_size),mode='constant')
 		lbl = transform.resize(label,(self.output_size,self.output_size),mode='constant', order=0, preserve_range=True)
+		# t2 = time()
+		# img = cv2.resize(image, (self.output_size, self.output_size))
+		# lbl = cv2.resize(label, (self.output_size, self.output_size))
+		# # opencv remove the unused dim
+		# lbl = lbl[:, :, np.newaxis]
+		# t3 = time()
+
+		# print(f"ski time {t2 - t1}, opencv time {t3 - t2}")
+
+		# opencv is 10 times faster than skimage, but opencv output is uint8, skimage is float64.
+		# so for the performance reason, just keep skimage.
 
 		return {'image':img,'label':lbl}
 
@@ -149,8 +163,8 @@ class ToTensor(object):
 		tmpImg = tmpImg.transpose((2, 0, 1))
 		tmpLbl = label.transpose((2, 0, 1))
 
-		return {'image': torch.from_numpy(tmpImg),
-			'label': torch.from_numpy(tmpLbl)}
+		return {'image': torch.from_numpy(tmpImg).to(torch.float32),
+			'label': torch.from_numpy(tmpLbl).to(torch.float32)}
 
 class ToTensorLab(object):
 	"""Convert ndarrays in sample to Tensors."""
@@ -231,8 +245,6 @@ class ToTensorLab(object):
 				tmpImg[:,:,1] = (image[:,:,1]-0.456)/0.224
 				tmpImg[:,:,2] = (image[:,:,2]-0.406)/0.225
 
-
-
 		tmpLbl[:,:,0] = label[:,:,0]
 
 		# change the r,g,b to b,r,g from [0,255] to [0,1]
@@ -240,8 +252,9 @@ class ToTensorLab(object):
 		tmpImg = tmpImg.transpose((2, 0, 1))
 		tmpLbl = label.transpose((2, 0, 1))
 
-		return {'image': torch.from_numpy(tmpImg),
-			'label': torch.from_numpy(tmpLbl)}
+		return {'image': torch.from_numpy(tmpImg).to(torch.float32),
+			'label': torch.from_numpy(tmpLbl).to(torch.float32)}
+
 
 class SalObjDataset(Dataset):
 	def __init__(self,img_name_list,lbl_name_list,transform=None):
@@ -260,7 +273,8 @@ class SalObjDataset(Dataset):
 		# image = Image.open(self.image_name_list[idx])#io.imread(self.image_name_list[idx])
 		# label = Image.open(self.label_name_list[idx])#io.imread(self.label_name_list[idx])
 
-		image = io.imread(self.image_name_list[idx])
+		image = cv2.imread(self.image_name_list[idx])    #h, w, c, BGR
+		image = image[:, :, ::-1]
 
 		if(0==len(self.label_name_list)):
 			label_3 = np.zeros(image.shape)
